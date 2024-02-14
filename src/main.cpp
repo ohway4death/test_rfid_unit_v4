@@ -22,7 +22,9 @@
 #define queen "1d fd 6e 58"
 #define king "1d e1 27 55"
 
-#define OUTPUT_GAIN 50 // スピーカー
+#define WAIT    1
+#define SCAN    2
+#define RESULT  3
 
 static LGFX lcd; // LGFXのインスタンスを作成。
 
@@ -37,15 +39,12 @@ LGFX_Sprite spriteWord4(&spriteBase); // スプライトを使う場合はLGFX_S
 
 MFRC522_I2C mfrc522(0x28, -1); // Create MFRC522 instance.
 
-AudioGeneratorMP3 *mp3 = NULL;
-AudioGeneratorWAV *wav = NULL;
-AudioFileSourceSD *file;
-AudioFileSourceID3 *id3;
-AudioOutputI2S *out;
 
-int nocard = 0;
 void uid_display_proc();
 void display_trump();
+void wait();
+void scan();
+void result();
 
 // ---------------------------------------------------------------
 void setup()
@@ -87,18 +86,6 @@ void setup()
   Wire.begin();
   mfrc522.PCD_Init();
 
-
-  M5.Axp.SetSpkEnable(true);
-  WiFi.mode(WIFI_OFF); 
-  file = new AudioFileSourceSD("/mp3/drumroll2.mp3");
-  id3 = new AudioFileSourceID3(file);
-  out = new AudioOutputI2S(0, 0); // Output to ExternalDAC
-  out->SetPinout(12, 0, 2);
-  out->SetOutputModeMono(true);
-  out->SetGain((float)OUTPUT_GAIN/100.0);
-  mp3 = new AudioGeneratorMP3();
-  
-
 }
 
 // ---------------------------------------------------------------
@@ -106,34 +93,21 @@ uint16_t x = 0;
 uint16_t y = 11;
 float_t scaleX = 1;
 float_t scaleY = 0.5;
+
+int nocard = 0;
+int state = WAIT;
+
 void loop()
 {
 
-  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial())
+  if (state == WAIT){
+    wait();
+  }else if (state == SCAN)
   {
-    nocard++;
-    if (2 < nocard)
-    {
-      spriteBase.fillScreen(BLACK); // 画面の塗りつぶし
-      spriteWord1.pushRotateZoom(280, 120, 90, 1, 1);
-      spriteWord2.pushRotateZoom(200, 120, 90, 1, 1);
-      spriteWord3.pushRotateZoom(120, 120, 90, 1, 1);
-      spriteWord4.pushRotateZoom(40, 120, 90, 1, 1);
-      spriteBase.pushSprite(&lcd, 0, 0);
-    }
-  }
-  else
+    scan();
+  }else if (state == RESULT)
   {
-    nocard = 0;
-    // display_trump();
-
-    mp3->begin(id3, out);
-    if (mp3->isRunning())
-    {
-      if (!mp3->loop())
-        mp3->stop();
-    }
-
+    result();
   }
     delay(200);
 }
@@ -185,7 +159,35 @@ void display_trump()
     spriteBase.pushSprite(0, 0);
     delay(100);
   }
+}
+// ---------------------------------------------------------------
 
+void wait(){
+
+  spriteBase.fillScreen(BLACK); // 画面の塗りつぶし
+  spriteWord1.pushRotateZoom(280, 120, 90, 1, 1);
+  spriteWord2.pushRotateZoom(200, 120, 90, 1, 1);
+  spriteWord3.pushRotateZoom(120, 120, 90, 1, 1);
+  spriteWord4.pushRotateZoom(40, 120, 90, 1, 1);
+  spriteBase.pushSprite(&lcd, 0, 0);
+
+  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial())
+  {
+    return;
+  }else{
+    state = SCAN;
+  }
 }
 
-// ---------------------------------------------------------------
+void scan(){
+  display_trump();
+  state = RESULT;
+}
+
+void result(){
+  M5.update();
+  if (M5.BtnA.isPressed())
+  {
+    state = WAIT;
+  }
+}
